@@ -2,13 +2,14 @@
 from __future__ import print_function
 from os import environ
 from fuzzywuzzy import fuzz
-
+from gmusicapi import Mobileclient
 
 class GMusic(Mobileclient):
     def login(self, authtoken=None):
         username  = environ['EMAIL']
         password  = environ['PASSWORD']
         device_id = environ['DEVICE_ID']
+        locale    = environ['LOCALE']
         if authtoken is not None:
             self.android_id               = device_id
             self.session._authtoken       = authtoken
@@ -21,7 +22,7 @@ class GMusic(Mobileclient):
                 # Failed with the test-request so we set "is_authenticated=False"
                 # and go through the login-process again to get a new "authtoken"
                 self.session.is_authenticated = False
-        if super(GMusic, self).login(username, password, device_id, locale='en_GB'):
+        if super(GMusic, self).login(username, password, device_id, locale=locale):
             return self.session._authtoken
         # Prevent further execution in case we failed with the login-process
         return False
@@ -146,7 +147,7 @@ def build_response(speechlet_response, sessionAttributes={}):
 
 def lambda_handler(event, context):
     if event['request']['type'] == 'LaunchRequest':
-        return get_welcome_response(event)
+        return get_welcome_response()
     elif event['request']['type'] == 'IntentRequest':
         return on_intent(event)
     elif event['request']['type'] == 'SessionEndedRequest':
@@ -268,8 +269,9 @@ def play_playlist(event):
         speech_output = "I'm sorry, I couldn't find any tracks from that album in your library"
         return build_response(build_short_speechlet_response(speech_output, should_end_session))
     next_token = 0
-    next_url = get_url(song_ids[next_token], api)
+    next_url =  api.get_stream_url(song_ids[0])
     card_title = "Google Music"
     speech_output = "Playing " + best_playlist['name']
     return build_response(build_audio_speechlet_response(card_title, speech_output, should_end_session, next_url, next_token))
+
 
