@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import print_function
 from os import environ
+from random import randrange
 from fuzzywuzzy import fuzz
 from gmusicapi import Mobileclient
 
@@ -212,6 +213,8 @@ def stopped(event):
 
 def failed(event):
     print('failed')
+    if 'error' in event['request']:
+        print(event['request']['error'])
 
 
 def get_help():
@@ -236,7 +239,7 @@ def stop():
 
 def on_intent(event):
     intent_name = event['request']['intent']['name']
-    if intent_name == 'PlayPlaylistIntent':
+    if intent_name == 'PlayPlaylistIntent' or intent_name == 'ShufflePlaylistIntent':
         return play_playlist(event)
     elif intent_name == 'AMAZON.ResumeIntent':
         return resume(event)
@@ -271,6 +274,9 @@ def convert_dict_to_token(_dict):
 
 def play_playlist(event):
     playlist_name = event['request']['intent']['slots']['playlist_name']['value']
+    shuffle_mode = 0
+    if event['request']['intent']['name'] == 'ShufflePlaylistIntent':
+        shuffle_mode = 1
     should_end_session = True
     api = GMusic()
     authtoken = api.login()
@@ -292,7 +298,9 @@ def play_playlist(event):
         speech_output = "I'm sorry, I couldn't find any tracks from that album in your library"
         return build_response(build_short_speechlet_response(speech_output, should_end_session))
     next_playing = 0
-    _dict = {'id': best_playlist['id'], 'p': next_playing, 'auth': authtoken}
+    if shuffle_mode:
+        next_playing = randrange(len(best_playlist['tracks']))
+    _dict = {'id': best_playlist['id'], 'p': next_playing, 's': shuffle_mode, 'auth': authtoken}
     next_token = convert_dict_to_token(_dict)
     next_url = api.get_stream_url(best_playlist['tracks'][next_playing]['trackId'])
     card_title = "Google Music"
@@ -304,26 +312,9 @@ def play_playlist(event):
 def nearly_finished(event):
     print('nearly_finished')
     current_token = event['request']['token']
-    _dict = convert_token_to_dict(current_token)
-    authtoken = _dict['auth']
-    api = GMusic()
-    authtoken = api.login(authtoken)
-    id = _dict['id']
-    playlists = api.get_all_user_playlist_contents()
-    best_playlist = None
-    for playlist in playlists:
-        if playlist['id'] == id:
-            best_playlist = playlist
-            break
-    if best_playlist is None:
+    next_url, next_token, error = get_next_url_and_token(current_token, 1)
+    if error is not None:
         return do_nothing()
-    now_playing = int(_dict['p'])
-    next_playing = now_playing + 1
-    if len(best_playlist['tracks']) <= next_playing:
-        return do_nothing()
-    next_url = api.get_stream_url(best_playlist['tracks'][next_playing]['trackId'])
-    _dict['p'] = next_playing
-    next_token = convert_dict_to_token(_dict)
     audio_response = build_audio_enqueue_response(True, next_url, current_token, next_token)
     return build_response(audio_response)
 
@@ -339,6 +330,15 @@ def get_playlist_from_id(playlists, id):
 
 def skip(event, skip_by):
     current_token = event['context']['AudioPlayer']['token']
+    next_url, next_token, error = get_next_url_and_token(current_token, skip_by)
+    if error is not None:
+        return build_response(build_short_speechlet_response(error, True))
+    speech_output = 'Okay'
+    speechlet_response = build_cardless_audio_speechlet_response(speech_output, True, next_url, next_token)
+    return build_response(speechlet_response)
+
+
+def get_next_url_and_token(current_token, skip_by):
     _dict = convert_token_to_dict(current_token)
     authtoken = _dict['auth']
     api = GMusic()
@@ -347,39 +347,30 @@ def skip(event, skip_by):
     id = _dict['id']
     best_playlist = get_playlist_from_id(playlists, id)
     if best_playlist is None:
-        speech_output = 'I cannot find the current playlist.'
-        return build_response(build_short_speechlet_response(speech_output, True))
+        return None, None, 'I cannot find the current playlist.'
     now_playing = int(_dict['p'])
     next_playing = now_playing + skip_by
+    shuffle_mode = int(_dict['s'])
+    if shuffle_mode and skip_by != 0:
+        next_playing = randrange(len(best_playlist['tracks']))
     if len(best_playlist['tracks']) <= next_playing:
-        speech_output = 'There are no more songs in the playlist.'
-        return build_response(build_short_speechlet_response(speech_output, True))
+        return None, None, 'There are no more songs in the playlist.'
     next_url = api.get_stream_url(best_playlist['tracks'][next_playing]['trackId'])
     _dict['p'] = next_playing
     next_token = convert_dict_to_token(_dict)
-    speech_output = 'Okay'
-    speechlet_response = build_cardless_audio_speechlet_response(speech_output, True, next_url, next_token)
-    return build_response(speechlet_response)
+    return next_url, next_token, None
 
 
 def resume(event, offsetInMilliseconds=None):
     if 'token' not in event['context']['AudioPlayer']:
         return get_welcome_response()
     current_token = event['context']['AudioPlayer']['token']
-    _dict = convert_token_to_dict(current_token)
-    authtoken = _dict['auth']
-    api = GMusic()
-    authtoken = api.login(authtoken)
-    playlists = api.get_all_user_playlist_contents()
-    id = _dict['id']
-    best_playlist = get_playlist_from_id(playlists, id)
+    next_url, next_token, error = get_next_url_and_token(current_token, 0)
     speech_output = 'Okay'
     if offsetInMilliseconds is None:
         speech_output = 'Resuming'
         offsetInMilliseconds = event['context']['AudioPlayer']['offsetInMilliseconds']
-    next_playing = int(_dict['p'])
-    next_url = api.get_stream_url(best_playlist['tracks'][next_playing]['trackId'])
-    speechlet_response = build_cardless_audio_speechlet_response(speech_output, True, next_url, current_token, offsetInMilliseconds)
+    speechlet_response = build_cardless_audio_speechlet_response(speech_output, True, next_url, next_token, offsetInMilliseconds)
     return build_response(speechlet_response)
 
 
