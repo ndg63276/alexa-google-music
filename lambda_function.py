@@ -49,6 +49,27 @@ def build_speechlet_response(title, output, reprompt_text, should_end_session):
     }
 
 
+def build_cardless_audio_speechlet_response(output, should_end_session, url, token, offsetInMilliseconds=0):
+    return {
+        'outputSpeech': {
+            'type': 'PlainText',
+            'text': output
+        },
+        'directives': [{
+            'type': 'AudioPlayer.Play',
+            'playBehavior': 'REPLACE_ALL',
+            'audioItem': {
+                'stream': {
+                    'token': str(token),
+                    'url': url,
+                    'offsetInMilliseconds': offsetInMilliseconds
+                }
+            }
+        }],
+        'shouldEndSession': should_end_session
+    }
+
+
 def build_audio_speechlet_response(title, output, should_end_session, url, token, offsetInMilliseconds=0):
     return {
         'outputSpeech': {
@@ -146,12 +167,13 @@ def build_response(speechlet_response, sessionAttributes={}):
 
 
 def lambda_handler(event, context):
+    print(event)
     if event['request']['type'] == 'LaunchRequest':
         return get_welcome_response()
     elif event['request']['type'] == 'IntentRequest':
         return on_intent(event)
     elif event['request']['type'] == 'SessionEndedRequest':
-        logger.info('on_session_ended')
+        print('on_session_ended')
     elif event['request']['type'].startswith('AudioPlayer'):
         return handle_playback(event)
 
@@ -159,8 +181,7 @@ def lambda_handler(event, context):
 def get_welcome_response():
     speech_output = 'Welcome to Google Music.'
     reprompt_text = 'Ask for a playlist from your Google Music account.'
-    should_end_session = False
-    return build_response(build_cardless_speechlet_response(speech_output, reprompt_text, should_end_session))
+    return build_response(build_cardless_speechlet_response(speech_output, reprompt_text, False))
 
 
 def handle_playback(event):
@@ -178,52 +199,57 @@ def handle_playback(event):
 
 
 def started(event):
-    logger.info('started')
+    print('started')
 
 
 def finished(event):
-    logger.info('finished')
+    print('finished')
 
 
 def stopped(event):
-    logger.info("stopped")
+    print("stopped")
 
 
 def failed(event):
-    logger.info('failed')
-
-
-def nearly_finished(event):
-    logger.info('nearly_finished')
+    print('failed')
 
 
 def get_help():
     speech_output = 'This skill can play playlists from your Google Music account. '
     card_title = 'Google Music Help'
-    should_end_session = False
-    return build_response(build_speechlet_response(card_title, speech_output, None, should_end_session))
+    return build_response(build_speechlet_response(card_title, speech_output, None, False))
 
 
 def illegal_action():
     speech_output = 'You can\'t do that with this skill.'
-    should_end_session = True
-    return build_response(build_short_speechlet_response(speech_output, should_end_session))
+    return build_response(build_short_speechlet_response(speech_output, True))
 
 
 def do_nothing():
     return build_response({})
 
 
+def stop():
+    speech_output = 'Okay'
+    return build_response(build_stop_speechlet_response(speech_output, True))
+
+
 def on_intent(event):
     intent_name = event['request']['intent']['name']
     if intent_name == 'PlayPlaylistIntent':
         return play_playlist(event)
+    elif intent_name == 'AMAZON.ResumeIntent':
+        return resume(event)
+    elif intent_name == 'AMAZON.NextIntent':
+        return skip(event, 1)
+    elif intent_name == 'AMAZON.PreviousIntent':
+        return skip(event, -1)
     elif intent_name == 'AMAZON.HelpIntent':
         return get_help()
     elif intent_name == 'AMAZON.CancelIntent':
         return do_nothing()
     elif intent_name == 'AMAZON.StopIntent' or intent_name == 'AMAZON.PauseIntent':
-        return stop(intent, session)
+        return stop()
     else:
         raise ValueError("Invalid intent")
 
@@ -244,7 +270,6 @@ def convert_dict_to_token(_dict):
 
 
 def play_playlist(event):
-    song_ids = []
     playlist_name = event['request']['intent']['slots']['playlist_name']['value']
     should_end_session = True
     api = GMusic()
@@ -263,15 +288,99 @@ def play_playlist(event):
     if best_playlist is None:
         speech_output = 'Sorry, I couldn\'t find the playlist ' + playlist_name
         return build_response(build_short_speechlet_response(speech_output, should_end_session))
-    for track in best_playlist['tracks']:
-        song_ids.append(track['trackId'])
-    if len(song_ids) == 0:
+    if len(best_playlist['tracks']) == 0:
         speech_output = "I'm sorry, I couldn't find any tracks from that album in your library"
         return build_response(build_short_speechlet_response(speech_output, should_end_session))
-    next_token = 0
-    next_url =  api.get_stream_url(song_ids[0])
+    next_playing = 0
+    _dict = {'id': best_playlist['id'], 'p': next_playing, 'auth': authtoken}
+    next_token = convert_dict_to_token(_dict)
+    next_url = api.get_stream_url(best_playlist['tracks'][next_playing]['trackId'])
     card_title = "Google Music"
     speech_output = "Playing " + best_playlist['name']
-    return build_response(build_audio_speechlet_response(card_title, speech_output, should_end_session, next_url, next_token))
+    speechlet_response = build_audio_speechlet_response(card_title, speech_output, True, next_url, next_token)
+    return build_response(speechlet_response)
+
+
+def nearly_finished(event):
+    print('nearly_finished')
+    current_token = event['request']['token']
+    _dict = convert_token_to_dict(current_token)
+    authtoken = _dict['auth']
+    api = GMusic()
+    authtoken = api.login(authtoken)
+    id = _dict['id']
+    playlists = api.get_all_user_playlist_contents()
+    best_playlist = None
+    for playlist in playlists:
+        if playlist['id'] == id:
+            best_playlist = playlist
+            break
+    if best_playlist is None:
+        return do_nothing()
+    now_playing = int(_dict['p'])
+    next_playing = now_playing + 1
+    if len(best_playlist['tracks']) <= next_playing:
+        return do_nothing()
+    next_url = api.get_stream_url(best_playlist['tracks'][next_playing]['trackId'])
+    _dict['p'] = next_playing
+    next_token = convert_dict_to_token(_dict)
+    audio_response = build_audio_enqueue_response(True, next_url, current_token, next_token)
+    return build_response(audio_response)
+
+
+def get_playlist_from_id(playlists, id):
+    best_playlist = None
+    for playlist in playlists:
+        if playlist['id'] == id:
+            best_playlist = playlist
+            break
+    return best_playlist
+
+
+def skip(event, skip_by):
+    current_token = event['context']['AudioPlayer']['token']
+    _dict = convert_token_to_dict(current_token)
+    authtoken = _dict['auth']
+    api = GMusic()
+    authtoken = api.login(authtoken)
+    playlists = api.get_all_user_playlist_contents()
+    id = _dict['id']
+    best_playlist = get_playlist_from_id(playlists, id)
+    if best_playlist is None:
+        speech_output = 'I cannot find the current playlist.'
+        return build_response(build_short_speechlet_response(speech_output, True))
+    now_playing = int(_dict['p'])
+    next_playing = now_playing + skip_by
+    if len(best_playlist['tracks']) <= next_playing:
+        speech_output = 'There are no more songs in the playlist.'
+        return build_response(build_short_speechlet_response(speech_output, True))
+    next_url = api.get_stream_url(best_playlist['tracks'][next_playing]['trackId'])
+    _dict['p'] = next_playing
+    next_token = convert_dict_to_token(_dict)
+    speech_output = 'Okay'
+    speechlet_response = build_cardless_audio_speechlet_response(speech_output, True, next_url, next_token)
+    return build_response(speechlet_response)
+
+
+def resume(event, offsetInMilliseconds=None):
+    if 'token' not in event['context']['AudioPlayer']:
+        return get_welcome_response()
+    current_token = event['context']['AudioPlayer']['token']
+    _dict = convert_token_to_dict(current_token)
+    authtoken = _dict['auth']
+    api = GMusic()
+    authtoken = api.login(authtoken)
+    playlists = api.get_all_user_playlist_contents()
+    id = _dict['id']
+    best_playlist = get_playlist_from_id(playlists, id)
+    speech_output = 'Okay'
+    if offsetInMilliseconds is None:
+        speech_output = 'Resuming'
+        offsetInMilliseconds = event['context']['AudioPlayer']['offsetInMilliseconds']
+    next_playing = int(_dict['p'])
+    next_url = api.get_stream_url(best_playlist['tracks'][next_playing]['trackId'])
+    speechlet_response = build_cardless_audio_speechlet_response(speech_output, True, next_url, current_token, offsetInMilliseconds)
+    return build_response(speechlet_response)
+
 
 
