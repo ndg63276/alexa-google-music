@@ -311,15 +311,17 @@ def play_playlist(event):
     next_playing = 0
     if shuffle_mode:
         next_playing = randrange(len(best_playlist['tracks']))
+    track_id = best_playlist['tracks'][next_playing]['trackId']
     _dict = {
         'id': best_playlist['id'],
         'p': next_playing,
         's': shuffle_mode,
         'l': loop_mode,
+        't': track_id,
         'auth': authtoken,
         }
     next_token = convert_dict_to_token(_dict)
-    next_url = api.get_stream_url(best_playlist['tracks'][next_playing]['trackId'])
+    next_url = api.get_stream_url(trackId)
     card_title = "Google Music"
     speech_output = "Playing " + best_playlist['name']
     speechlet_response = build_audio_speechlet_response(card_title, speech_output, True, next_url, next_token)
@@ -376,8 +378,10 @@ def get_next_url_and_token(current_token, skip_by):
             next_playing = 0
         else:
             return None, None, 'There are no more songs in the playlist.'
-    next_url = api.get_stream_url(best_playlist['tracks'][next_playing]['trackId'])
+    track_id = best_playlist['tracks'][next_playing]['trackId']
+    next_url = api.get_stream_url(trackId)
     _dict['p'] = next_playing
+    _dict['t'] = track_id
     next_token = convert_dict_to_token(_dict)
     return next_url, next_token, None
 
