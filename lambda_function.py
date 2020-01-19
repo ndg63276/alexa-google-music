@@ -2,6 +2,7 @@
 from __future__ import print_function
 from os import environ
 from random import randrange
+from time import time
 from fuzzywuzzy import fuzz
 from gmusicapi import Mobileclient
 
@@ -269,6 +270,8 @@ def on_intent(event):
         return change_mode(event, 'l', 1)
     elif intent_name == "AMAZON.LoopOffIntent":
         return change_mode(event, 'l', 0)
+    elif intent_name == "AMAZON.RepeatIntent" or intent_name == "NowPlayingIntent":
+        return say_video_title(event)
     elif intent_name == 'AMAZON.StopIntent' or intent_name == 'AMAZON.PauseIntent':
         return stop()
     else:
@@ -353,6 +356,39 @@ def get_playlist_from_id(playlists, id):
             best_playlist = playlist
             break
     return best_playlist
+
+
+def say_video_title(event):
+    start_time = time()
+    current_token = event['context']['AudioPlayer']['token']
+    _dict = convert_token_to_dict(current_token)
+    authtoken = _dict['auth']
+    api = GMusic()
+    authtoken = api.login(authtoken)
+    if authtoken is False:
+        speech_response = 'Sorry, login failed.'
+        return build_response(build_short_speechlet_response(speech_response, True))
+    playlists = api.get_all_user_playlist_contents()
+    id = _dict['id']
+    best_playlist = get_playlist_from_id(playlists, id)
+    if best_playlist is None:
+        speech_response = 'I cannot find the current playlist.'
+        return build_response(build_short_speechlet_response(speech_response, True))
+    now_playing = int(_dict['p'])
+    track_id = best_playlist['tracks'][now_playing]['trackId']
+    library_generator = api.get_all_songs(True)
+    speech_response = 'I do not know the name of the song'
+    while time() - start_time < 7:
+        try:
+            library = next(library_generator)
+            for song in library:
+                if song['id'] == track_id:
+                    artist, title = song['artist'], song['title']
+                    speech_response = 'Now playing ' + title + ' by ' + artist
+                    break
+        except StopIteration:
+            break
+    return build_response(build_short_speechlet_response(speech_response, True))
 
 
 def skip(event, skip_by):
