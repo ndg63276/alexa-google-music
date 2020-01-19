@@ -218,7 +218,7 @@ def failed(event):
 
 
 def get_help():
-    speech_output = 'This skill can play playlists from your Google Music account. '
+    speech_output = 'This skill can play playlists from your Google Music account.'
     card_title = 'Google Music Help'
     return build_response(build_speechlet_response(card_title, speech_output, None, False))
 
@@ -247,10 +247,20 @@ def on_intent(event):
         return skip(event, 1)
     elif intent_name == 'AMAZON.PreviousIntent':
         return skip(event, -1)
+    elif intent_name == 'AMAZON.StartOverIntent':
+        return skip(event, 0)
     elif intent_name == 'AMAZON.HelpIntent':
         return get_help()
     elif intent_name == 'AMAZON.CancelIntent':
         return do_nothing()
+    elif intent_name == "AMAZON.ShuffleOnIntent":
+        return change_mode(event, 's', 1)
+    elif intent_name == "AMAZON.ShuffleOffIntent":
+        return change_mode(event, 's', 0)
+    elif intent_name == "AMAZON.LoopOnIntent":
+        return change_mode(event, 'l', 1)
+    elif intent_name == "AMAZON.LoopOffIntent":
+        return change_mode(event, 'l', 0)
     elif intent_name == 'AMAZON.StopIntent' or intent_name == 'AMAZON.PauseIntent':
         return stop()
     else:
@@ -275,6 +285,7 @@ def convert_dict_to_token(_dict):
 def play_playlist(event):
     playlist_name = event['request']['intent']['slots']['playlist_name']['value']
     shuffle_mode = 0
+    loop_mode = 1
     if event['request']['intent']['name'] == 'ShufflePlaylistIntent':
         shuffle_mode = 1
     should_end_session = True
@@ -300,7 +311,13 @@ def play_playlist(event):
     next_playing = 0
     if shuffle_mode:
         next_playing = randrange(len(best_playlist['tracks']))
-    _dict = {'id': best_playlist['id'], 'p': next_playing, 's': shuffle_mode, 'auth': authtoken}
+    _dict = {
+        'id': best_playlist['id'],
+        'p': next_playing,
+        's': shuffle_mode,
+        'l': loop_mode,
+        'auth': authtoken,
+        }
     next_token = convert_dict_to_token(_dict)
     next_url = api.get_stream_url(best_playlist['tracks'][next_playing]['trackId'])
     card_title = "Google Music"
@@ -353,8 +370,12 @@ def get_next_url_and_token(current_token, skip_by):
     shuffle_mode = int(_dict['s'])
     if shuffle_mode and skip_by != 0:
         next_playing = randrange(len(best_playlist['tracks']))
+    loop_mode = int(_dict['l'])
     if len(best_playlist['tracks']) <= next_playing:
-        return None, None, 'There are no more songs in the playlist.'
+        if loop_mode:
+            next_playing = 0
+        else:
+            return None, None, 'There are no more songs in the playlist.'
     next_url = api.get_stream_url(best_playlist['tracks'][next_playing]['trackId'])
     _dict['p'] = next_playing
     next_token = convert_dict_to_token(_dict)
@@ -374,4 +395,17 @@ def resume(event, offsetInMilliseconds=None):
     return build_response(speechlet_response)
 
 
+def change_mode(event, mode, value):
+    if 'token' not in event['context']['AudioPlayer']:
+        speech_output = 'Nothing is currently playing.'
+        return build_response(build_short_speechlet_response(speech_output, True))
+    current_token = event['context']['AudioPlayer']['token']
+    _dict = convert_token_to_dict(current_token)
+    _dict[mode] = str(value)
+    current_token = convert_dict_to_token(_dict)
+    speech_output = 'Okay'
+    offsetInMilliseconds = event['context']['AudioPlayer']['offsetInMilliseconds']
+    next_url, next_token, error = get_next_url_and_token(current_token, 0)
+    speechlet_response = build_cardless_audio_speechlet_response(speech_output, True, next_url, current_token, offsetInMilliseconds)
+    return build_response(speechlet_response)
 
