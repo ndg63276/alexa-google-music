@@ -205,6 +205,14 @@ def started(event):
 
 def finished(event):
     print('finished')
+    current_token = event['request']['token']
+    _dict = convert_token_to_dict(current_token)
+    authtoken = _dict['auth']
+    api = GMusic()
+    authtoken = api.login(authtoken)
+    if authtoken is not False:
+        track_id = _dict['t']
+        api.increment_song_playcount(track_id)
 
 
 def stopped(event):
@@ -321,7 +329,7 @@ def play_playlist(event):
         'auth': authtoken,
         }
     next_token = convert_dict_to_token(_dict)
-    next_url = api.get_stream_url(trackId)
+    next_url = api.get_stream_url(track_id)
     card_title = "Google Music"
     speech_output = "Playing " + best_playlist['name']
     speechlet_response = build_audio_speechlet_response(card_title, speech_output, True, next_url, next_token)
@@ -362,6 +370,8 @@ def get_next_url_and_token(current_token, skip_by):
     authtoken = _dict['auth']
     api = GMusic()
     authtoken = api.login(authtoken)
+    if authtoken is False:
+        return None, None, 'Sorry, login failed.'
     playlists = api.get_all_user_playlist_contents()
     id = _dict['id']
     best_playlist = get_playlist_from_id(playlists, id)
@@ -379,7 +389,7 @@ def get_next_url_and_token(current_token, skip_by):
         else:
             return None, None, 'There are no more songs in the playlist.'
     track_id = best_playlist['tracks'][next_playing]['trackId']
-    next_url = api.get_stream_url(trackId)
+    next_url = api.get_stream_url(track_id)
     _dict['p'] = next_playing
     _dict['t'] = track_id
     next_token = convert_dict_to_token(_dict)
