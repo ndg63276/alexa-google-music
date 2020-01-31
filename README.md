@@ -1,6 +1,6 @@
-# alexa-google-music
+# Alexa / Google Music
 
-* **What is this** It's an Alexa skill to play music from your Google Music Account.
+* **What is this?** It's an Alexa skill to play music from your Google Music Account.
 * **Who is this for?** Anyone with an Alexa device and some music uploaded to Google Music.
 * **Can it play any song?** It can only play music you have uploaded, and can only play playlists you have created.
 * **How do I set it up?** Just follow the instructions below. It may look a little daunting, but it should be ok.
