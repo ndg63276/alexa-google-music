@@ -1,5 +1,15 @@
 # alexa-google-music
 
+* **What is this** It's an Alexa skill to play music from your Google Music Account.
+* **Who is this for?** Anyone with an Alexa device and some music uploaded to Google Music.
+* **Can it play any song?** It can only play music you have uploaded, and can only play playlists you have created.
+* **How do I set it up?** Just follow the instructions below. It may look a little daunting, but it should be ok.
+* **Will it cost me anything?** No, it is entirely free. You have to set up an Amazon AWS account, but you should be entirely covered by the free tier.
+* **What do I say to Alexa?** When you have set it up, just say "Alexa, ask Google Music to play Disco Music", or whatever your favourite playlist is called in Google Music.
+* **Can it shuffle?** Yes, just say 'shuffle' instead of 'play'.
+* **What other commands work?** "Alexa, pause/resume/next/previous" should all work. If you say "Alexa, can you say that again", she should tell you the name of the song. Also, you can say shuffle on/off or loop on/off. 
+
+
 ### Stage 1: Get a Google App Password
 1. Go to https://myaccount.google.com/.
 2. Click "Security" on the left.
