@@ -5,6 +5,7 @@ from random import randrange
 from time import time
 from fuzzywuzzy import fuzz
 from gmusicapi import Mobileclient
+from gmusicapi.exceptions import InvalidDeviceId
 
 class GMusic(Mobileclient):
     def login(self, authtoken=None):
@@ -46,6 +47,21 @@ def build_speechlet_response(title, output, reprompt_text, should_end_session):
                 'type': 'PlainText',
                 'text': reprompt_text
             }
+        },
+        'shouldEndSession': should_end_session
+    }
+
+
+def build_carded_speechlet_response(title, card_content, output, should_end_session):
+    return {
+        'outputSpeech': {
+            'type': 'PlainText',
+            'text': output
+        },
+        'card': {
+            'type': 'Simple',
+            'title': title,
+            'content': card_content
         },
         'shouldEndSession': should_end_session
     }
@@ -301,7 +317,18 @@ def play_playlist(event):
         shuffle_mode = 1
     should_end_session = True
     api = GMusic()
-    authtoken = api.login()
+    try:
+        authtoken = api.login()
+    except InvalidDeviceId as e:
+        speech_output = 'Login failed due to an invalid device ID. I have listed possible IDs in the Alexa app, under Activity'
+        card_content = 'Set one of these as your device id: '
+        for id in e.valid_device_ids:
+            if len(id) == 16:
+                card_content += id + ', '
+        speechlet_response = build_carded_speechlet_response('Google Music', card_content, speech_output, should_end_session)
+        return build_response(speechlet_response)
+    except:
+        authtoken = False
     if authtoken is False:
         speech_output = 'Sorry, login failed.'
         return build_response(build_short_speechlet_response(speech_output, should_end_session))
