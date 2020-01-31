@@ -7,7 +7,8 @@
 * **Will it cost me anything?** No, it is entirely free. You have to set up an Amazon AWS account, but you should be entirely covered by the free tier.
 * **What do I say to Alexa?** When you have set it up, just say "Alexa, ask Google Music to play Disco Music", or whatever your favourite playlist is called in Google Music.
 * **Can it shuffle?** Yes, just say 'shuffle' instead of 'play'.
-* **What other commands work?** "Alexa, pause/resume/next/previous" should all work. If you say "Alexa, can you say that again", she should tell you the name of the song. Also, you can say shuffle on/off or loop on/off. 
+* **What other commands work?** "Alexa, pause/resume/next/previous" should all work. If you say "Alexa, can you say that again", she should tell you the name of the song. Also, you can say shuffle on/off or loop on/off.
+* **It tells me the device ID is invalid?** If you open the Alexa app on your phone, go to the menu, and select Activity, it should show you some possible values for the device ID. Put one of those in as your DEVICE_ID in the environment variables as described below.
 
 
 ### Stage 1: Get a Google App Password
@@ -42,7 +43,7 @@
 |EMAIL         |(Put your gmail email address here)|
 |PASSWORD      |(Put the 16 character password you created in stage 1 here)|
 |LOCALE        |(Put your [ICU](http://www.localeplanet.com/icu/) locale here, eg en_US, en_GB)|
-|DEVICE_ID     |(Put a 16 character hex code here, eg 1234567890abcdef)|
+|DEVICE_ID     |(Put your device ID here. If you don't know it, put 1234567890abcdef, and you should be told a valid value when you try and use the skill)|
 
 15. Scroll down to the section labelled "Basic Settings", and click "Edit". Set the Memory to 512 MB, and the Timeout to 9 seconds. Click "Save".
 16. Click "Save" in the top right. This will upload the lambda_function.zip file to Lambda. This may take a few minutes depending on your connection speed.
